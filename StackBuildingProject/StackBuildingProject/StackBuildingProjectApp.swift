@@ -1,33 +1,17 @@
-//
-//  StackBuildingProjectApp.swift
-//  StackBuildingProject
-//
-//  Created by Giorgio Durante on 12/01/26.
-//
-
 import SwiftUI
 
 @main
 struct StackBuildingProjectApp: App {
-
-    @State private var appModel = AppModel()
+    @State private var immersiveSpaceIsShown = false
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
-                .environment(appModel)
+            ContentView(immersiveSpaceIsShown: $immersiveSpaceIsShown)
         }
+        .windowStyle(.plain)
 
-        ImmersiveSpace(id: appModel.immersiveSpaceID) {
-            ImmersiveView()
-                .environment(appModel)
-                .onAppear {
-                    appModel.immersiveSpaceState = .open
-                }
-                .onDisappear {
-                    appModel.immersiveSpaceState = .closed
-                }
+        ImmersiveSpace(id: "StackGameSpace") {
+            GameView()
         }
-        .immersionStyle(selection: .constant(.mixed), in: .mixed)
-     }
+    }
 }

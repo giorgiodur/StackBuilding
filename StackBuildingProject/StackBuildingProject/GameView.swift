@@ -1,30 +1,27 @@
-//
-//  ImmersiveView.swift
-//  StackBuildingProject
-//
-//  Created by Giorgio Durante on 12/01/26.
-//
-
 import SwiftUI
 import RealityKit
-import RealityKitContent
 
-struct ImmersiveView: View {
-
+struct GameView: View {
     var body: some View {
         RealityView { content in
-            // Add the initial RealityKit content
-            if let immersiveContentEntity = try? await Entity(named: "Immersive", in: realityKitContentBundle) {
-                content.add(immersiveContentEntity)
-
-                // Put skybox here.  See example in World project available at
-                // https://developer.apple.com/
-            }
+            // Cerca un tavolo o pavimento orizzontale
+            let anchor = AnchorEntity(.plane(.horizontal, classification: .any, minimumBounds: [0.2, 0.2]))
+            
+            // Materiale e Mesh per il cubo
+            let material = SimpleMaterial(color: .gray, isMetallic: false)
+            let mesh = MeshResource.generateBox(width: 0.3, height: 0.05, depth: 0.3)
+            
+            let baseBlock = ModelEntity(mesh: mesh, materials: [material])
+            
+            // Posiziona il cubo
+            baseBlock.position = [0, 0.025, 0]
+            baseBlock.name = "BaseBlock"
+            
+            anchor.addChild(baseBlock)
+            content.add(anchor)
+            
+        } placeholder: {
+            ProgressView()
         }
     }
-}
-
-#Preview(immersionStyle: .mixed) {
-    ImmersiveView()
-        .environment(AppModel())
 }

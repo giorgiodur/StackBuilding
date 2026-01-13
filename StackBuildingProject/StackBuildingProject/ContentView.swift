@@ -1,30 +1,35 @@
-//
-//  ContentView.swift
-//  StackBuildingProject
-//
-//  Created by Giorgio Durante on 12/01/26.
-//
-
 import SwiftUI
 import RealityKit
-import RealityKitContent
 
 struct ContentView: View {
+    @Binding var immersiveSpaceIsShown: Bool
+    @Environment(\.openImmersiveSpace) var openImmersiveSpace
+    @Environment(\.dismissImmersiveSpace) var dismissImmersiveSpace
 
     var body: some View {
-        VStack {
-            Model3D(named: "Scene", bundle: realityKitContentBundle)
-                .padding(.bottom, 50)
-
-            Text("Hello, world!")
-
-            ToggleImmersiveSpaceButton()
+        VStack(spacing: 20) {
+            Text("Stack Vision Pro")
+                .font(.extraLargeTitle2)
+                .fontWeight(.bold)
+            
+            Text("Trova un tavolo o il pavimento per giocare")
+                .font(.body)
+                .foregroundStyle(.secondary)
+            
+            Button(immersiveSpaceIsShown ? "Esci dal Gioco" : "Inizia Gioco") {
+                Task {
+                    if !immersiveSpaceIsShown {
+                        await openImmersiveSpace(id: "StackGameSpace")
+                        immersiveSpaceIsShown = true
+                    } else {
+                        await dismissImmersiveSpace()
+                        immersiveSpaceIsShown = false
+                    }
+                }
+            }
+            .padding()
+            .glassBackgroundEffect()
         }
         .padding()
     }
-}
-
-#Preview(windowStyle: .automatic) {
-    ContentView()
-        .environment(AppModel())
 }

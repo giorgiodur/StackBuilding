@@ -4,15 +4,15 @@ import RealityKitContent
 import Combine
 
 struct GameView: View {
-    // --- VARIABILI DI STATO ---
+    // --- STATO DEL GIOCO ---
     @State private var rootEntity: Entity?
     @State private var currentBlock: Entity?
-    @State private var lastBlockPosition: SIMD3<Float> = [0, 0, 0]
+    @State private var lastBlockX: Float = 0.0
     @State private var towerHeight: Int = 0
     
-    // --- VARIABILI MOVIMENTO ---
+    // --- MOVIMENTO ---
     @State private var direction: Float = 1.0
-    @State private var speed: Float = 0.01
+    @State private var speed: Float = 0.015
     @State private var isMoving: Bool = false
     
     // --- DIMENSIONI ---
@@ -20,123 +20,197 @@ struct GameView: View {
     let blockHeight: Float = 0.05
     let blockDepth: Float = 0.4
     
+    // --- TESTO PUNTEGGIO ---
+    @State private var scoreEntity: Entity?
+    
     // --- TIMER ---
     let timer = Timer.publish(every: 0.016, on: .main, in: .common).autoconnect()
 
-    // --- CORPO DELLA VISTA (BODY) ---
     var body: some View {
         RealityView { content in
-            // 1. ANCORA PRINCIPALE (Spostata per visibilità)
+            // 1. ANCORA PRINCIPALE
             let anchor = Entity()
             anchor.position = [0, -0.2, -0.8]
             
-            // ---------------------------------------------------------
-            // SCATOLA GIGANTE PER I CLICK ("Lastra di vetro")
-            // ---------------------------------------------------------
-            // Usiamo 10 metri e trasparenza 99% (alpha 0.01) così il sistema la "vede"
+            // 2. SCATOLA GIGANTE INVISIBILE (CLICK ANYWHERE)
             let triggerMesh = MeshResource.generateBox(size: 10.0)
             let triggerMaterial = SimpleMaterial(color: .white.withAlphaComponent(0.01), isMetallic: false)
             let triggerEntity = ModelEntity(mesh: triggerMesh, materials: [triggerMaterial])
-            
-            // Fondamentale: deve avere le collisioni
             triggerEntity.generateCollisionShapes(recursive: false)
             triggerEntity.components.set(InputTargetComponent())
-            
-            // Aggiungiamo la scatola gigante all'ancora
             anchor.addChild(triggerEntity)
             
-            // 2. BASE DEL GIOCO (Pavimento della torre)
-            let baseMesh = MeshResource.generateBox(size: [currentWidth, blockHeight, blockDepth])
-            let baseMaterial = SimpleMaterial(color: .gray, isMetallic: false)
-            let baseBlock = ModelEntity(mesh: baseMesh, materials: [baseMaterial])
-            baseBlock.position = [0, 0, 0]
+            // 3. TESTO PUNTEGGIO
+            let textMesh = MeshResource.generateText("Score: 0", extrusionDepth: 0.01, font: .systemFont(ofSize: 0.1))
+            let textMaterial = SimpleMaterial(color: .white, isMetallic: false)
+            let textEntity = ModelEntity(mesh: textMesh, materials: [textMaterial])
+            textEntity.position = [-0.2, 0.5, -0.5]
+            anchor.addChild(textEntity)
+            self.scoreEntity = textEntity
             
-            // Base solida
-            baseBlock.generateCollisionShapes(recursive: false)
-            baseBlock.components.set(InputTargetComponent())
+            // 4. BASE INIZIALE
+            createBase(on: anchor)
             
-            anchor.addChild(baseBlock)
             content.add(anchor)
-            
-            // Salviamo i riferimenti
             self.rootEntity = anchor
-            self.lastBlockPosition = baseBlock.position
             
-            // Avviamo il primo blocco
+            // AVVIO GIOCO
             spawnNewBlock()
         }
-        // GESTURE: Click ovunque (grazie alla scatola gigante)
         .gesture(
-            SpatialTapGesture()
-                .onEnded { _ in
-                    // Se il blocco si sta muovendo, lo fermiamo
-                    if isMoving {
-                        placeBlock()
-                    }
+            SpatialTapGesture().onEnded { _ in
+                if isMoving {
+                    placeBlock()
+                } else {
+                    restartGame()
                 }
+            }
         )
-        // ANIMAZIONE (60 volte al secondo)
         .onReceive(timer) { _ in
             guard isMoving, let block = currentBlock else { return }
             
             var currentPos = block.position
             currentPos.x += speed * direction
             
-            // Rimbalzo destra/sinistra
-            if currentPos.x > 0.4 {
+            if currentPos.x > 0.5 {
                 direction = -1.0
-            } else if currentPos.x < -0.4 {
+            } else if currentPos.x < -0.5 {
                 direction = 1.0
             }
             
             block.position = currentPos
         }
-    } // <--- QUESTA CHIUDE IL "BODY". LE FUNZIONI VANNO SOTTO QUI.
+    }
     
-    // --- FUNZIONI DI GIOCO ---
+    // --- LOGICA DI GIOCO ---
+    
+    func createBase(on anchor: Entity) {
+        let baseMesh = MeshResource.generateBox(size: [0.4, blockHeight, blockDepth])
+        let baseMaterial = SimpleMaterial(color: .gray, isMetallic: false)
+        let baseBlock = ModelEntity(mesh: baseMesh, materials: [baseMaterial])
+        baseBlock.position = [0, 0, 0]
+        anchor.addChild(baseBlock)
+        
+        self.lastBlockX = 0.0
+        self.currentWidth = 0.4
+    }
     
     func spawnNewBlock() {
         guard let root = rootEntity else { return }
         
         towerHeight += 1
+        updateScore()
+        
         let newY = Float(towerHeight) * blockHeight
         
-        // Creiamo il nuovo blocco
         let mesh = MeshResource.generateBox(size: [currentWidth, blockHeight, blockDepth])
         let material = SimpleMaterial(color: randomColor(), isMetallic: false)
         let newBlock = ModelEntity(mesh: mesh, materials: [material])
         
-        // Posizione di partenza (laterale)
-        newBlock.position = [-0.35, newY, 0]
-        
-        // Collisioni necessarie anche per i blocchi
-        newBlock.generateCollisionShapes(recursive: false)
-        newBlock.components.set(InputTargetComponent())
+        newBlock.position = [-0.4, newY, 0]
         
         root.addChild(newBlock)
         
-        // Aggiorniamo lo stato
         self.currentBlock = newBlock
         self.isMoving = true
     }
     
     func placeBlock() {
+        // Qui facciamo il cast: trattiamo 'block' come 'ModelEntity' per accedere a .model
+        guard let block = currentBlock as? ModelEntity else { return }
         isMoving = false
         
-        if let block = currentBlock {
-            lastBlockPosition = block.position
-            print("Blocco fermato a X: \(block.position.x)")
+        let currentX = block.position.x
+        let diff = currentX - lastBlockX
+        let absDiff = abs(diff)
+        
+        // GAME OVER - MANCATO
+        if absDiff > currentWidth {
+            print("GAME OVER - Mancato!")
+            gameOverVisuals()
+            return
         }
         
-        // Ne facciamo partire subito un altro
+        // CALCOLO TAGLIO
+        let newWidth = currentWidth - absDiff
+        
+        // GAME OVER - TROPPO PICCOLO
+        if newWidth < 0.02 {
+            print("GAME OVER - Troppo piccolo!")
+            gameOverVisuals()
+            return
+        }
+        
+        // AGGIORNAMENTO BLOCCO
+        let newCenter = lastBlockX + (diff / 2)
+        
+        // Ora funziona perché 'block' è un ModelEntity
+        block.model?.mesh = MeshResource.generateBox(size: [newWidth, blockHeight, blockDepth])
+        block.position.x = newCenter
+        
+        self.currentWidth = newWidth
+        self.lastBlockX = newCenter
+        
         spawnNewBlock()
     }
     
-    func randomColor() -> UIColor {
-        return [UIColor.red, .blue, .green, .orange, .purple, .cyan, .magenta].randomElement()!
+    func gameOverVisuals() {
+        // Castiamo a ModelEntity per cambiare colore
+        if let block = currentBlock as? ModelEntity {
+            let material = SimpleMaterial(color: .black, isMetallic: true)
+            block.model?.materials = [material]
+        }
+        
+        // Castiamo a ModelEntity per cambiare il testo
+        if let textEntity = scoreEntity as? ModelEntity {
+            let mesh = MeshResource.generateText("GAME OVER\nTap to Restart", extrusionDepth: 0.01, font: .systemFont(ofSize: 0.08))
+            textEntity.model?.mesh = mesh
+            textEntity.model?.materials = [SimpleMaterial(color: .red, isMetallic: false)]
+        }
     }
     
-} // <--- QUESTA CHIUDE LA STRUCT "GameView". FINE DEL FILE.
+    func restartGame() {
+        guard let root = rootEntity else { return }
+        
+        root.children.removeAll()
+        
+        // Ricrea Trigger
+        let triggerMesh = MeshResource.generateBox(size: 10.0)
+        let triggerMaterial = SimpleMaterial(color: .white.withAlphaComponent(0.01), isMetallic: false)
+        let triggerEntity = ModelEntity(mesh: triggerMesh, materials: [triggerMaterial])
+        triggerEntity.generateCollisionShapes(recursive: false)
+        triggerEntity.components.set(InputTargetComponent())
+        root.addChild(triggerEntity)
+        
+        // Ricrea Score
+        let textMesh = MeshResource.generateText("Score: 0", extrusionDepth: 0.01, font: .systemFont(ofSize: 0.1))
+        let textMaterial = SimpleMaterial(color: .white, isMetallic: false)
+        let textEntity = ModelEntity(mesh: textMesh, materials: [textMaterial])
+        textEntity.position = [-0.2, 0.5, -0.5]
+        root.addChild(textEntity)
+        self.scoreEntity = textEntity
+        
+        createBase(on: root)
+        
+        towerHeight = 0
+        currentWidth = 0.4
+        lastBlockX = 0.0
+        
+        spawnNewBlock()
+    }
+    
+    func updateScore() {
+        // Cast sicuro
+        guard let textEntity = scoreEntity as? ModelEntity else { return }
+        
+        let mesh = MeshResource.generateText("Score: \(towerHeight)", extrusionDepth: 0.01, font: .systemFont(ofSize: 0.1))
+        textEntity.model?.mesh = mesh
+    }
+    
+    func randomColor() -> UIColor {
+        return [UIColor.red, .blue, .green, .orange, .cyan, .purple, .magenta, .yellow].randomElement()!
+    }
+}
 
 #Preview {
     GameView()

@@ -7,18 +7,20 @@ struct GameView: View {
     // --- STATO DEL GIOCO ---
     @State private var rootEntity: Entity?
     @State private var currentBlock: Entity?
-    @State private var lastBlockX: Float = 0.0
+    
+    @State private var lastBlockPosition: SIMD3<Float> = [0, 0, 0]
     @State private var towerHeight: Int = 0
     
-    // --- MOVIMENTO ---
-    @State private var direction: Float = 1.0
-    @State private var speed: Float = 0.015
-    @State private var isMoving: Bool = false
-    
-    // --- DIMENSIONI ---
-    @State private var currentWidth: Float = 0.4
+    // --- DIMENSIONI ATTUALI ---
+    @State private var currentSize: SIMD2<Float> = [0.4, 0.4]
     let blockHeight: Float = 0.05
-    let blockDepth: Float = 0.4
+    
+    // --- MOVIMENTO E VELOCITÀ ---
+    // Partiamo più lenti (0.010 invece di 0.015)
+    @State private var speed: Float = 0.010
+    @State private var isMoving: Bool = false
+    @State private var moveOnXAxis: Bool = true
+    @State private var moveDirection: Float = 1.0
     
     // --- TESTO PUNTEGGIO ---
     @State private var scoreEntity: Entity?
@@ -69,30 +71,36 @@ struct GameView: View {
         .onReceive(timer) { _ in
             guard isMoving, let block = currentBlock else { return }
             
+            // LOGICA DI MOVIMENTO
             var currentPos = block.position
-            currentPos.x += speed * direction
             
-            if currentPos.x > 0.5 {
-                direction = -1.0
-            } else if currentPos.x < -0.5 {
-                direction = 1.0
+            if moveOnXAxis {
+                currentPos.x += speed * moveDirection
+            } else {
+                currentPos.z += speed * moveDirection
             }
             
             block.position = currentPos
+            
+            // Rimbalzo ai bordi (0.6m)
+            if abs(currentPos.x) > 0.6 || abs(currentPos.z) > 0.6 {
+                moveDirection *= -1.0
+            }
         }
     }
     
-    // --- LOGICA DI GIOCO ---
+    // --- FUNZIONI ---
     
     func createBase(on anchor: Entity) {
-        let baseMesh = MeshResource.generateBox(size: [0.4, blockHeight, blockDepth])
+        let baseMesh = MeshResource.generateBox(size: [0.4, blockHeight, 0.4])
         let baseMaterial = SimpleMaterial(color: .gray, isMetallic: false)
         let baseBlock = ModelEntity(mesh: baseMesh, materials: [baseMaterial])
         baseBlock.position = [0, 0, 0]
         anchor.addChild(baseBlock)
         
-        self.lastBlockX = 0.0
-        self.currentWidth = 0.4
+        // Reset variabili stato
+        self.lastBlockPosition = [0, 0, 0]
+        self.currentSize = [0.4, 0.4]
     }
     
     func spawnNewBlock() {
@@ -103,12 +111,35 @@ struct GameView: View {
         
         let newY = Float(towerHeight) * blockHeight
         
-        let mesh = MeshResource.generateBox(size: [currentWidth, blockHeight, blockDepth])
+        // DIREZIONI A ROTAZIONE (Nord -> Est -> Sud -> Ovest)
+        let directionIndex = towerHeight % 4
+        var startPos: SIMD3<Float> = [lastBlockPosition.x, newY, lastBlockPosition.z]
+        
+        switch directionIndex {
+        case 0: // NORD
+            moveOnXAxis = false
+            moveDirection = 1.0
+            startPos.z = -0.5
+        case 1: // EST
+            moveOnXAxis = true
+            moveDirection = -1.0
+            startPos.x = 0.5
+        case 2: // SUD
+            moveOnXAxis = false
+            moveDirection = -1.0
+            startPos.z = 0.5
+        case 3: // OVEST
+            moveOnXAxis = true
+            moveDirection = 1.0
+            startPos.x = -0.5
+        default: break
+        }
+        
+        let mesh = MeshResource.generateBox(size: [currentSize.x, blockHeight, currentSize.y])
         let material = SimpleMaterial(color: randomColor(), isMetallic: false)
         let newBlock = ModelEntity(mesh: mesh, materials: [material])
         
-        newBlock.position = [-0.4, newY, 0]
-        
+        newBlock.position = startPos
         root.addChild(newBlock)
         
         self.currentBlock = newBlock
@@ -116,52 +147,63 @@ struct GameView: View {
     }
     
     func placeBlock() {
-        // Qui facciamo il cast: trattiamo 'block' come 'ModelEntity' per accedere a .model
         guard let block = currentBlock as? ModelEntity else { return }
         isMoving = false
         
-        let currentX = block.position.x
-        let diff = currentX - lastBlockX
-        let absDiff = abs(diff)
+        let currentPos = block.position
         
-        // GAME OVER - MANCATO
-        if absDiff > currentWidth {
-            print("GAME OVER - Mancato!")
+        // Calcolo differenze
+        let diffX = currentPos.x - lastBlockPosition.x
+        let diffZ = currentPos.z - lastBlockPosition.z
+        
+        var newWidth = currentSize.x
+        var newDepth = currentSize.y
+        var newCenterX = lastBlockPosition.x
+        var newCenterZ = lastBlockPosition.z
+        
+        // Logica Taglio
+        if moveOnXAxis {
+            let overlap = currentSize.x - abs(diffX)
+            if overlap <= 0 { gameOverVisuals(); return }
+            newWidth = overlap
+            newCenterX = lastBlockPosition.x + (diffX / 2)
+        } else {
+            let overlap = currentSize.y - abs(diffZ)
+            if overlap <= 0 { gameOverVisuals(); return }
+            newDepth = overlap
+            newCenterZ = lastBlockPosition.z + (diffZ / 2)
+        }
+        
+        // Check dimensione minima
+        if newWidth < 0.02 || newDepth < 0.02 {
             gameOverVisuals()
             return
         }
         
-        // CALCOLO TAGLIO
-        let newWidth = currentWidth - absDiff
+        // Aggiorna Blocco Visivo
+        block.model?.mesh = MeshResource.generateBox(size: [newWidth, blockHeight, newDepth])
+        block.position = [newCenterX, currentPos.y, newCenterZ]
         
-        // GAME OVER - TROPPO PICCOLO
-        if newWidth < 0.02 {
-            print("GAME OVER - Troppo piccolo!")
-            gameOverVisuals()
-            return
+        // Salva stato
+        self.currentSize = [newWidth, newDepth]
+        self.lastBlockPosition = [newCenterX, 0, newCenterZ]
+        
+        // --- LOGICA AUMENTO VELOCITÀ ---
+        // Ogni 10 cubi (10, 20, 30...), acceleriamo
+        if towerHeight % 10 == 0 {
+            speed += 0.002
+            print("Level Up! Nuova velocità: \(speed)")
         }
-        
-        // AGGIORNAMENTO BLOCCO
-        let newCenter = lastBlockX + (diff / 2)
-        
-        // Ora funziona perché 'block' è un ModelEntity
-        block.model?.mesh = MeshResource.generateBox(size: [newWidth, blockHeight, blockDepth])
-        block.position.x = newCenter
-        
-        self.currentWidth = newWidth
-        self.lastBlockX = newCenter
         
         spawnNewBlock()
     }
     
     func gameOverVisuals() {
-        // Castiamo a ModelEntity per cambiare colore
         if let block = currentBlock as? ModelEntity {
             let material = SimpleMaterial(color: .black, isMetallic: true)
             block.model?.materials = [material]
         }
         
-        // Castiamo a ModelEntity per cambiare il testo
         if let textEntity = scoreEntity as? ModelEntity {
             let mesh = MeshResource.generateText("GAME OVER\nTap to Restart", extrusionDepth: 0.01, font: .systemFont(ofSize: 0.08))
             textEntity.model?.mesh = mesh
@@ -171,7 +213,6 @@ struct GameView: View {
     
     func restartGame() {
         guard let root = rootEntity else { return }
-        
         root.children.removeAll()
         
         // Ricrea Trigger
@@ -192,17 +233,14 @@ struct GameView: View {
         
         createBase(on: root)
         
+        // RESET COMPLETO
         towerHeight = 0
-        currentWidth = 0.4
-        lastBlockX = 0.0
-        
+        speed = 0.010 // Torniamo alla velocità lenta iniziale
         spawnNewBlock()
     }
     
     func updateScore() {
-        // Cast sicuro
         guard let textEntity = scoreEntity as? ModelEntity else { return }
-        
         let mesh = MeshResource.generateText("Score: \(towerHeight)", extrusionDepth: 0.01, font: .systemFont(ofSize: 0.1))
         textEntity.model?.mesh = mesh
     }

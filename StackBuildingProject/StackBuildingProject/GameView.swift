@@ -11,20 +11,20 @@ struct GameView: View {
     @State private var currentBlock: Entity?
     @State private var lastBlockPosition: SIMD3<Float> = [0, 0, 0]
     @State private var towerHeight: Int = 0
-    @State private var currentSize: SIMD2<Float> = [0.4, 0.4]
+    
+    // Grandezza blocchi (1.2m)
+    @State private var currentSize: SIMD2<Float> = [1.2, 1.2]
     let blockHeight: Float = 0.05
     
-    // Velocità iniziale
     @State private var speed: Float = 0.005
     
     @State private var isMoving: Bool = false
     @State private var moveOnXAxis: Bool = true
     @State private var moveDirection: Float = 1.0
     
-    // --- TESTI UI ---
+    // UI
     @State private var scoreEntity: Entity?
-    @State private var levelEntity: Entity? // Nuovo
-    @State private var speedEntity: Entity? // Nuovo
+    @State private var levelEntity: Entity?
     
     let timer = Timer.publish(every: 0.016, on: .main, in: .common).autoconnect()
 
@@ -33,16 +33,19 @@ struct GameView: View {
             let anchor = Entity()
             anchor.position = startingPosition
             
-            // SCATOLA INVISIBILE (Tap Trigger)
-            let triggerMesh = MeshResource.generateBox(width: 5.0, height: 5.0, depth: 5.0)
+            // Trigger 3x5x3 (Tap Volume)
+            let triggerMesh = MeshResource.generateBox(width: 3.0, height: 5.0, depth: 3.0)
             let triggerMat = SimpleMaterial(color: .white.withAlphaComponent(0.0), isMetallic: false)
             let triggerEntity = ModelEntity(mesh: triggerMesh, materials: [triggerMat])
+            
+            // Centro a 2.5m
             triggerEntity.position.y = 2.5
+            
             triggerEntity.generateCollisionShapes(recursive: false)
             triggerEntity.components.set(InputTargetComponent())
             anchor.addChild(triggerEntity)
             
-            // CREAZIONE INTERFACCIA (Score, Livello, Velocità)
+            // Setup UI (Laterale + Billboard)
             setupUI(on: anchor)
             
             // Base
@@ -75,35 +78,42 @@ struct GameView: View {
         else { currentPos.z += speed * moveDirection }
         
         block.position = currentPos
-        if abs(currentPos.x) > 0.6 || abs(currentPos.z) > 0.6 { moveDirection *= -1.0 }
+        
+        // Limite movimento (1.8m per lato)
+        if abs(currentPos.x) > 1.8 || abs(currentPos.z) > 1.8 {
+            moveDirection *= -1.0
+        }
     }
     
     func createBase(on anchor: Entity) {
-        let baseMesh = MeshResource.generateBox(size: [0.4, blockHeight, 0.4])
+        let baseMesh = MeshResource.generateBox(size: [currentSize.x, blockHeight, currentSize.y])
         let baseMaterial = SimpleMaterial(color: .gray, isMetallic: false)
         let baseBlock = ModelEntity(mesh: baseMesh, materials: [baseMaterial])
         baseBlock.position = [0, 0, 0]
         anchor.addChild(baseBlock)
+        
         self.lastBlockPosition = [0, 0, 0]
-        self.currentSize = [0.4, 0.4]
+        self.currentSize = [1.2, 1.2]
     }
     
     func spawnNewBlock() {
         guard let root = rootEntity else { return }
         towerHeight += 1
         
-        // Aggiorniamo tutte le scritte (Score, Livello, Velocità)
         updateUI()
         
         let newY = Float(towerHeight) * blockHeight
         let directionIndex = towerHeight % 4
         var startPos: SIMD3<Float> = [lastBlockPosition.x, newY, lastBlockPosition.z]
         
+        // Distanza Spawn
+        let spawnDist: Float = 1.5
+        
         switch directionIndex {
-        case 0: moveOnXAxis = false; moveDirection = 1.0; startPos.z = -0.5
-        case 1: moveOnXAxis = true; moveDirection = -1.0; startPos.x = 0.5
-        case 2: moveOnXAxis = false; moveDirection = -1.0; startPos.z = 0.5
-        case 3: moveOnXAxis = true; moveDirection = 1.0; startPos.x = -0.5
+        case 0: moveOnXAxis = false; moveDirection = 1.0; startPos.z = -spawnDist
+        case 1: moveOnXAxis = true; moveDirection = -1.0; startPos.x = spawnDist
+        case 2: moveOnXAxis = false; moveDirection = -1.0; startPos.z = spawnDist
+        case 3: moveOnXAxis = true; moveDirection = 1.0; startPos.x = -spawnDist
         default: break
         }
         
@@ -146,9 +156,9 @@ struct GameView: View {
         self.currentSize = [newWidth, newDepth]
         self.lastBlockPosition = [newCenterX, 0, newCenterZ]
         
-        // INCREMENTO VELOCITÀ OGNI 10 BLOCCHI
-        if towerHeight % 10 == 0 {
-            speed += 0.005
+        // Aumento VELOCITÀ ogni 5 blocchi (+0.002)
+        if towerHeight % 5 == 0 {
+            speed += 0.002
         }
         
         spawnNewBlock()
@@ -158,8 +168,6 @@ struct GameView: View {
         if let block = currentBlock as? ModelEntity {
             block.model?.materials = [SimpleMaterial(color: .black, isMetallic: true)]
         }
-        
-        // Cambia testo Score in Game Over
         if let textEntity = scoreEntity as? ModelEntity {
             let mesh = MeshResource.generateText("GAME OVER", extrusionDepth: 0.01, font: .systemFont(ofSize: 0.08))
             textEntity.model?.mesh = mesh
@@ -171,8 +179,8 @@ struct GameView: View {
         guard let root = rootEntity else { return }
         root.children.removeAll()
         
-        // Ricrea Trigger Invisibile
-        let triggerMesh = MeshResource.generateBox(width: 5.0, height: 5.0, depth: 5.0)
+        // Trigger 3x5x3
+        let triggerMesh = MeshResource.generateBox(width: 3.0, height: 5.0, depth: 3.0)
         let triggerMat = SimpleMaterial(color: .white.withAlphaComponent(0.0), isMetallic: false)
         let triggerEntity = ModelEntity(mesh: triggerMesh, materials: [triggerMat])
         triggerEntity.position.y = 2.5
@@ -180,67 +188,54 @@ struct GameView: View {
         triggerEntity.components.set(InputTargetComponent())
         root.addChild(triggerEntity)
         
-        // Ricrea tutta la UI (Score, Livello, Velocità)
         setupUI(on: root)
-        
         createBase(on: root)
+        
         towerHeight = 0
-        speed = 0.005 // Reset velocità
+        speed = 0.005
         spawnNewBlock()
     }
     
-    // --- GESTIONE GRAFICA UI ---
+    // --- GESTIONE UI (LATERALE + BILLBOARD) ---
     
     func setupUI(on anchor: Entity) {
-        // 1. LIVELLO (In alto, Giallo)
+        // Posizione: Spostato a sinistra (-1.0)
+        
+        // 1. LIVELLO
         let levelMesh = MeshResource.generateText("Level: 1", extrusionDepth: 0.01, font: .systemFont(ofSize: 0.08))
         let levelMat = SimpleMaterial(color: .yellow, isMetallic: false)
         let levelEnt = ModelEntity(mesh: levelMesh, materials: [levelMat])
-        levelEnt.position = [-0.3, 0.70, -0.5] // Più in alto
+        
+        levelEnt.position = [-1.0, 0.65, 0.0]
+        levelEnt.components.set(BillboardComponent()) // Guarda sempre l'utente
+        
         anchor.addChild(levelEnt)
         self.levelEntity = levelEnt
         
-        // 2. SCORE (Al centro, Bianco, Più grande)
+        // 2. SCORE
         let scoreMesh = MeshResource.generateText("Score: 0", extrusionDepth: 0.01, font: .systemFont(ofSize: 0.1))
         let scoreMat = SimpleMaterial(color: .white, isMetallic: false)
         let scoreEnt = ModelEntity(mesh: scoreMesh, materials: [scoreMat])
-        scoreEnt.position = [-0.3, 0.55, -0.5]
+        
+        scoreEnt.position = [-1.0, 0.50, 0.0]
+        scoreEnt.components.set(BillboardComponent()) // Guarda sempre l'utente
+        
         anchor.addChild(scoreEnt)
         self.scoreEntity = scoreEnt
-        
-        // 3. VELOCITÀ (In basso, Ciano, Più piccolo)
-        let speedString = String(format: "Speed: %.3f", speed)
-        let speedMesh = MeshResource.generateText(speedString, extrusionDepth: 0.01, font: .systemFont(ofSize: 0.06))
-        let speedMat = SimpleMaterial(color: .cyan, isMetallic: false)
-        let speedEnt = ModelEntity(mesh: speedMesh, materials: [speedMat])
-        speedEnt.position = [-0.3, 0.45, -0.5] // Più in basso
-        anchor.addChild(speedEnt)
-        self.speedEntity = speedEnt
     }
     
     func updateUI() {
-        // Aggiorna Score
         if let scoreEnt = scoreEntity as? ModelEntity {
             let mesh = MeshResource.generateText("Score: \(towerHeight)", extrusionDepth: 0.01, font: .systemFont(ofSize: 0.1))
             scoreEnt.model?.mesh = mesh
-            // Resetta colore se era rosso per game over
             scoreEnt.model?.materials = [SimpleMaterial(color: .white, isMetallic: false)]
         }
         
-        // Aggiorna Livello (Logica: 0-10 = Lv1, 11-20 = Lv2, ecc.)
         if let levelEnt = levelEntity as? ModelEntity {
-            // Se towerHeight è 0, è livello 1. Se è 10, è livello 1. Se è 11, è livello 2.
-            // Formula: ((towerHeight - 1) / 10) + 1. Usiamo max(0) per gestire l'inizio.
-            let currentLevel = (towerHeight == 0) ? 1 : ((towerHeight - 1) / 10) + 1
+            // --- MODIFICA STEP 12: Livello aumenta ogni 5 blocchi ---
+            let currentLevel = (towerHeight == 0) ? 1 : ((towerHeight - 1) / 5) + 1
             let mesh = MeshResource.generateText("Level: \(currentLevel)", extrusionDepth: 0.01, font: .systemFont(ofSize: 0.08))
             levelEnt.model?.mesh = mesh
-        }
-        
-        // Aggiorna Velocità
-        if let speedEnt = speedEntity as? ModelEntity {
-            let speedString = String(format: "Speed: %.3f", speed)
-            let mesh = MeshResource.generateText(speedString, extrusionDepth: 0.01, font: .systemFont(ofSize: 0.06))
-            speedEnt.model?.mesh = mesh
         }
     }
     

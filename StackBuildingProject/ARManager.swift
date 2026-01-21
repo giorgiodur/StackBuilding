@@ -22,17 +22,15 @@ class ARManager {
         self.planeHandler = PlaneAnchorHandler(rootEntity: rootEntity)
         rootEntity.addChild(placementCursor)
         
-        // --- FIX DIMENSIONI STEP 5 ---
-        // Base 0.4, Altezza 0.05, Profondità 0.4
-        let mesh = MeshResource.generateBox(size: [0.4, 0.05, 0.4])
+        // --- MODIFICA STEP 9: CURSORE GIGANTE (1.2m) ---
+        // Adattato per corrispondere alla grandezza dei blocchi del gioco
+        let mesh = MeshResource.generateBox(size: [1.2, 0.05, 1.2])
         let mat = SimpleMaterial(color: .green.withAlphaComponent(0.6), isMetallic: false)
         let visualCursor = ModelEntity(mesh: mesh, materials: [mat])
         
-        // Alziamo di metà altezza (0.025) così poggia perfettamente sul piano
         visualCursor.position.y = 0.025
         
-        // --- FIX TAP ---
-        // Rendiamo il cursore un bersaglio valido per il Tap
+        // Input Target per il piazzamento
         visualCursor.generateCollisionShapes(recursive: false)
         visualCursor.components.set(InputTargetComponent())
         
@@ -68,13 +66,11 @@ class ARManager {
             let origin = transform.columns.3.xyz
             let direction = -transform.columns.2.xyz
             
-            // Raycast contro i tavoli
             let results = rootEntity.scene?.raycast(origin: origin, direction: direction, length: 3.0, query: .nearest, mask: PlaneAnchor.horizontalCollisionGroup)
             
             if let hit = results?.first {
                 placementCursor.isEnabled = true
                 placementCursor.position = hit.position
-                // Blocchiamo la rotazione per tenerlo allineato al mondo (più facile da giocare)
                 placementCursor.orientation = simd_quatf(angle: 0, axis: [0, 1, 0])
             } else {
                 placementCursor.isEnabled = false
@@ -89,9 +85,6 @@ class ARManager {
             gamePosition = placementCursor.position
             isGamePlaced = true
             placementCursor.isEnabled = false
-            // Nascondiamo i piani di debug per pulizia
-            // (Opzionale: se vuoi vedere ancora il tavolo, rimuovi questa riga)
-            // rootEntity.isEnabled = false
         }
     }
 }

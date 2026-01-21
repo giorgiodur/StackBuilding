@@ -7,10 +7,14 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		D59DD97F2F20E19D0011D238 /* ARUtilities.swift in Sources */ = {isa = PBXBuildFile; fileRef = D59DD97E2F20E19B0011D238 /* ARUtilities.swift */; };
+		D59DD9812F20E1BA0011D238 /* ARManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = D59DD9802F20E1B90011D238 /* ARManager.swift */; };
 		D5C938632F14FBD1007A9864 /* RealityKitContent in Frameworks */ = {isa = PBXBuildFile; productRef = D5C938622F14FBD1007A9864 /* RealityKitContent */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		D59DD97E2F20E19B0011D238 /* ARUtilities.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ARUtilities.swift; sourceTree = "<group>"; };
+		D59DD9802F20E1B90011D238 /* ARManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ARManager.swift; sourceTree = "<group>"; };
 		D5C9385D2F14FBD1007A9864 /* StackBuildingProject.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = StackBuildingProject.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		D5C938612F14FBD1007A9864 /* RealityKitContent */ = {isa = PBXFileReference; lastKnownFileType = wrapper; path = RealityKitContent; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -51,6 +55,8 @@
 		D5C938542F14FBD1007A9864 = {
 			isa = PBXGroup;
 			children = (
+				D59DD97E2F20E19B0011D238 /* ARUtilities.swift */,
+				D59DD9802F20E1B90011D238 /* ARManager.swift */,
 				D5C9385F2F14FBD1007A9864 /* StackBuildingProject */,
 				D5C938602F14FBD1007A9864 /* Packages */,
 				D5C9385E2F14FBD1007A9864 /* Products */,
@@ -148,6 +154,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				D59DD9812F20E1BA0011D238 /* ARManager.swift in Sources */,
+				D59DD97F2F20E19D0011D238 /* ARUtilities.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -165,6 +173,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "$(TARGET_NAME)/Info.plist";
+				INFOPLIST_KEY_NSWorldSensingUsageDescription = "Serve per scansionare il tavolo su cui giocare.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -194,6 +203,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "$(TARGET_NAME)/Info.plist";
+				INFOPLIST_KEY_NSWorldSensingUsageDescription = "Serve per scansionare il tavolo su cui giocare.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",

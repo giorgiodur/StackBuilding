@@ -6,18 +6,25 @@ import Combine
 struct GameView: View {
     var startingPosition: SIMD3<Float>
     
-    // --- VARIABILI STEP 5 ---
+    // --- STATI GIOCO ---
     @State private var rootEntity: Entity?
     @State private var currentBlock: Entity?
     @State private var lastBlockPosition: SIMD3<Float> = [0, 0, 0]
     @State private var towerHeight: Int = 0
-    @State private var currentSize: SIMD2<Float> = [0.4, 0.4] // Dimensioni Originali
+    @State private var currentSize: SIMD2<Float> = [0.4, 0.4]
     let blockHeight: Float = 0.05
-    @State private var speed: Float = 0.010
+    
+    // Velocità iniziale
+    @State private var speed: Float = 0.005
+    
     @State private var isMoving: Bool = false
     @State private var moveOnXAxis: Bool = true
     @State private var moveDirection: Float = 1.0
+    
+    // --- TESTI UI ---
     @State private var scoreEntity: Entity?
+    @State private var levelEntity: Entity? // Nuovo
+    @State private var speedEntity: Entity? // Nuovo
     
     let timer = Timer.publish(every: 0.016, on: .main, in: .common).autoconnect()
 
@@ -26,24 +33,17 @@ struct GameView: View {
             let anchor = Entity()
             anchor.position = startingPosition
             
-            // --- IL SEGRETO DEL TAP IN AR ---
-            // Creiamo una scatola invisibile enorme attorno al gioco.
-            // Qualsiasi tap in quest'area verrà catturato.
-            let triggerMesh = MeshResource.generateBox(width: 2.0, height: 2.0, depth: 2.0)
-            let triggerMat = SimpleMaterial(color: .white.withAlphaComponent(0.001), isMetallic: false)
+            // SCATOLA INVISIBILE (Tap Trigger)
+            let triggerMesh = MeshResource.generateBox(width: 5.0, height: 5.0, depth: 5.0)
+            let triggerMat = SimpleMaterial(color: .white.withAlphaComponent(0.0), isMetallic: false)
             let triggerEntity = ModelEntity(mesh: triggerMesh, materials: [triggerMat])
-            triggerEntity.position.y = 1.0 // Centro della scatola a 1m di altezza
+            triggerEntity.position.y = 2.5
             triggerEntity.generateCollisionShapes(recursive: false)
-            triggerEntity.components.set(InputTargetComponent()) // Rende cliccabile
+            triggerEntity.components.set(InputTargetComponent())
             anchor.addChild(triggerEntity)
             
-            // Score
-            let textMesh = MeshResource.generateText("Score: 0", extrusionDepth: 0.01, font: .systemFont(ofSize: 0.1))
-            let textMaterial = SimpleMaterial(color: .white, isMetallic: false)
-            let textEntity = ModelEntity(mesh: textMesh, materials: [textMaterial])
-            textEntity.position = [-0.2, 0.5, -0.5]
-            anchor.addChild(textEntity)
-            self.scoreEntity = textEntity
+            // CREAZIONE INTERFACCIA (Score, Livello, Velocità)
+            setupUI(on: anchor)
             
             // Base
             createBase(on: anchor)
@@ -53,7 +53,6 @@ struct GameView: View {
             
             spawnNewBlock()
         }
-        // Gesto Tap Generico (funziona grazie alla scatola invisibile)
         .gesture(SpatialTapGesture().targetedToAnyEntity().onEnded { _ in
             handleTap()
         })
@@ -62,7 +61,7 @@ struct GameView: View {
         }
     }
     
-    // --- LOGICA DI GIOCO STEP 5 ---
+    // --- LOGICA GIOCO ---
     
     func handleTap() {
         if isMoving { placeBlock() } else { restartGame() }
@@ -71,8 +70,10 @@ struct GameView: View {
     func gameLoop() {
         guard isMoving, let block = currentBlock else { return }
         var currentPos = block.position
+        
         if moveOnXAxis { currentPos.x += speed * moveDirection }
         else { currentPos.z += speed * moveDirection }
+        
         block.position = currentPos
         if abs(currentPos.x) > 0.6 || abs(currentPos.z) > 0.6 { moveDirection *= -1.0 }
     }
@@ -81,7 +82,7 @@ struct GameView: View {
         let baseMesh = MeshResource.generateBox(size: [0.4, blockHeight, 0.4])
         let baseMaterial = SimpleMaterial(color: .gray, isMetallic: false)
         let baseBlock = ModelEntity(mesh: baseMesh, materials: [baseMaterial])
-        baseBlock.position = [0, 0, 0] // Relativo all'ancora (quindi sul tavolo)
+        baseBlock.position = [0, 0, 0]
         anchor.addChild(baseBlock)
         self.lastBlockPosition = [0, 0, 0]
         self.currentSize = [0.4, 0.4]
@@ -90,7 +91,10 @@ struct GameView: View {
     func spawnNewBlock() {
         guard let root = rootEntity else { return }
         towerHeight += 1
-        updateScore()
+        
+        // Aggiorniamo tutte le scritte (Score, Livello, Velocità)
+        updateUI()
+        
         let newY = Float(towerHeight) * blockHeight
         let directionIndex = towerHeight % 4
         var startPos: SIMD3<Float> = [lastBlockPosition.x, newY, lastBlockPosition.z]
@@ -141,7 +145,12 @@ struct GameView: View {
         block.position = [newCenterX, currentPos.y, newCenterZ]
         self.currentSize = [newWidth, newDepth]
         self.lastBlockPosition = [newCenterX, 0, newCenterZ]
-        if towerHeight % 10 == 0 { speed += 0.002 }
+        
+        // INCREMENTO VELOCITÀ OGNI 10 BLOCCHI
+        if towerHeight % 10 == 0 {
+            speed += 0.005
+        }
+        
         spawnNewBlock()
     }
     
@@ -149,42 +158,90 @@ struct GameView: View {
         if let block = currentBlock as? ModelEntity {
             block.model?.materials = [SimpleMaterial(color: .black, isMetallic: true)]
         }
-        if let text = scoreEntity as? ModelEntity {
-            text.model?.mesh = MeshResource.generateText("GAME OVER", extrusionDepth: 0.01, font: .systemFont(ofSize: 0.08))
-            text.model?.materials = [SimpleMaterial(color: .red, isMetallic: false)]
+        
+        // Cambia testo Score in Game Over
+        if let textEntity = scoreEntity as? ModelEntity {
+            let mesh = MeshResource.generateText("GAME OVER", extrusionDepth: 0.01, font: .systemFont(ofSize: 0.08))
+            textEntity.model?.mesh = mesh
+            textEntity.model?.materials = [SimpleMaterial(color: .red, isMetallic: false)]
         }
     }
     
     func restartGame() {
         guard let root = rootEntity else { return }
-        // Rimuoviamo tutto TRANNE la scatola trigger (che è il primo figlio aggiunto)
-        // Per sicurezza, puliamo e ricreiamo il trigger
         root.children.removeAll()
         
-        let triggerMesh = MeshResource.generateBox(width: 2.0, height: 2.0, depth: 2.0)
-        let triggerMat = SimpleMaterial(color: .white.withAlphaComponent(0.001), isMetallic: false)
+        // Ricrea Trigger Invisibile
+        let triggerMesh = MeshResource.generateBox(width: 5.0, height: 5.0, depth: 5.0)
+        let triggerMat = SimpleMaterial(color: .white.withAlphaComponent(0.0), isMetallic: false)
         let triggerEntity = ModelEntity(mesh: triggerMesh, materials: [triggerMat])
-        triggerEntity.position.y = 1.0
+        triggerEntity.position.y = 2.5
         triggerEntity.generateCollisionShapes(recursive: false)
         triggerEntity.components.set(InputTargetComponent())
         root.addChild(triggerEntity)
         
-        let textMesh = MeshResource.generateText("Score: 0", extrusionDepth: 0.01, font: .systemFont(ofSize: 0.1))
-        let textMaterial = SimpleMaterial(color: .white, isMetallic: false)
-        let textEntity = ModelEntity(mesh: textMesh, materials: [textMaterial])
-        textEntity.position = [-0.2, 0.5, -0.5]
-        root.addChild(textEntity)
-        self.scoreEntity = textEntity
+        // Ricrea tutta la UI (Score, Livello, Velocità)
+        setupUI(on: root)
         
         createBase(on: root)
         towerHeight = 0
-        speed = 0.010
+        speed = 0.005 // Reset velocità
         spawnNewBlock()
     }
     
-    func updateScore() {
-        guard let text = scoreEntity as? ModelEntity else { return }
-        text.model?.mesh = MeshResource.generateText("Score: \(towerHeight)", extrusionDepth: 0.01, font: .systemFont(ofSize: 0.1))
+    // --- GESTIONE GRAFICA UI ---
+    
+    func setupUI(on anchor: Entity) {
+        // 1. LIVELLO (In alto, Giallo)
+        let levelMesh = MeshResource.generateText("Level: 1", extrusionDepth: 0.01, font: .systemFont(ofSize: 0.08))
+        let levelMat = SimpleMaterial(color: .yellow, isMetallic: false)
+        let levelEnt = ModelEntity(mesh: levelMesh, materials: [levelMat])
+        levelEnt.position = [-0.3, 0.70, -0.5] // Più in alto
+        anchor.addChild(levelEnt)
+        self.levelEntity = levelEnt
+        
+        // 2. SCORE (Al centro, Bianco, Più grande)
+        let scoreMesh = MeshResource.generateText("Score: 0", extrusionDepth: 0.01, font: .systemFont(ofSize: 0.1))
+        let scoreMat = SimpleMaterial(color: .white, isMetallic: false)
+        let scoreEnt = ModelEntity(mesh: scoreMesh, materials: [scoreMat])
+        scoreEnt.position = [-0.3, 0.55, -0.5]
+        anchor.addChild(scoreEnt)
+        self.scoreEntity = scoreEnt
+        
+        // 3. VELOCITÀ (In basso, Ciano, Più piccolo)
+        let speedString = String(format: "Speed: %.3f", speed)
+        let speedMesh = MeshResource.generateText(speedString, extrusionDepth: 0.01, font: .systemFont(ofSize: 0.06))
+        let speedMat = SimpleMaterial(color: .cyan, isMetallic: false)
+        let speedEnt = ModelEntity(mesh: speedMesh, materials: [speedMat])
+        speedEnt.position = [-0.3, 0.45, -0.5] // Più in basso
+        anchor.addChild(speedEnt)
+        self.speedEntity = speedEnt
+    }
+    
+    func updateUI() {
+        // Aggiorna Score
+        if let scoreEnt = scoreEntity as? ModelEntity {
+            let mesh = MeshResource.generateText("Score: \(towerHeight)", extrusionDepth: 0.01, font: .systemFont(ofSize: 0.1))
+            scoreEnt.model?.mesh = mesh
+            // Resetta colore se era rosso per game over
+            scoreEnt.model?.materials = [SimpleMaterial(color: .white, isMetallic: false)]
+        }
+        
+        // Aggiorna Livello (Logica: 0-10 = Lv1, 11-20 = Lv2, ecc.)
+        if let levelEnt = levelEntity as? ModelEntity {
+            // Se towerHeight è 0, è livello 1. Se è 10, è livello 1. Se è 11, è livello 2.
+            // Formula: ((towerHeight - 1) / 10) + 1. Usiamo max(0) per gestire l'inizio.
+            let currentLevel = (towerHeight == 0) ? 1 : ((towerHeight - 1) / 10) + 1
+            let mesh = MeshResource.generateText("Level: \(currentLevel)", extrusionDepth: 0.01, font: .systemFont(ofSize: 0.08))
+            levelEnt.model?.mesh = mesh
+        }
+        
+        // Aggiorna Velocità
+        if let speedEnt = speedEntity as? ModelEntity {
+            let speedString = String(format: "Speed: %.3f", speed)
+            let mesh = MeshResource.generateText(speedString, extrusionDepth: 0.01, font: .systemFont(ofSize: 0.06))
+            speedEnt.model?.mesh = mesh
+        }
     }
     
     func randomColor() -> UIColor {

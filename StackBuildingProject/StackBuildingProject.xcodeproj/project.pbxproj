@@ -173,7 +173,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "$(TARGET_NAME)/Info.plist";
-				INFOPLIST_KEY_NSWorldSensingUsageDescription = "Serve per scansionare il tavolo su cui giocare.";
+				INFOPLIST_KEY_NSWorldSensingUsageDescription = "Required to scan a table or floor for gameplay.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -203,7 +203,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "$(TARGET_NAME)/Info.plist";
-				INFOPLIST_KEY_NSWorldSensingUsageDescription = "Serve per scansionare il tavolo su cui giocare.";
+				INFOPLIST_KEY_NSWorldSensingUsageDescription = "Required to scan a table or floor for gameplay.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",

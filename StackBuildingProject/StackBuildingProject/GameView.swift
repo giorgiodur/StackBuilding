@@ -169,6 +169,7 @@ struct GameView: View {
             block.model?.materials = [SimpleMaterial(color: .black, isMetallic: true)]
         }
         if let textEntity = scoreEntity as? ModelEntity {
+            // Testo in INGLESE
             let mesh = MeshResource.generateText("GAME OVER", extrusionDepth: 0.01, font: .systemFont(ofSize: 0.08))
             textEntity.model?.mesh = mesh
             textEntity.model?.materials = [SimpleMaterial(color: .red, isMetallic: false)]
@@ -201,7 +202,7 @@ struct GameView: View {
     func setupUI(on anchor: Entity) {
         // Posizione: Spostato a sinistra (-1.0)
         
-        // 1. LIVELLO
+        // 1. LIVELLO (Testo INGLESE)
         let levelMesh = MeshResource.generateText("Level: 1", extrusionDepth: 0.01, font: .systemFont(ofSize: 0.08))
         let levelMat = SimpleMaterial(color: .yellow, isMetallic: false)
         let levelEnt = ModelEntity(mesh: levelMesh, materials: [levelMat])
@@ -212,7 +213,7 @@ struct GameView: View {
         anchor.addChild(levelEnt)
         self.levelEntity = levelEnt
         
-        // 2. SCORE
+        // 2. SCORE (Testo INGLESE)
         let scoreMesh = MeshResource.generateText("Score: 0", extrusionDepth: 0.01, font: .systemFont(ofSize: 0.1))
         let scoreMat = SimpleMaterial(color: .white, isMetallic: false)
         let scoreEnt = ModelEntity(mesh: scoreMesh, materials: [scoreMat])
@@ -226,14 +227,16 @@ struct GameView: View {
     
     func updateUI() {
         if let scoreEnt = scoreEntity as? ModelEntity {
+            // Testo INGLESE
             let mesh = MeshResource.generateText("Score: \(towerHeight)", extrusionDepth: 0.01, font: .systemFont(ofSize: 0.1))
             scoreEnt.model?.mesh = mesh
             scoreEnt.model?.materials = [SimpleMaterial(color: .white, isMetallic: false)]
         }
         
         if let levelEnt = levelEntity as? ModelEntity {
-            // --- MODIFICA STEP 12: Livello aumenta ogni 5 blocchi ---
+            // Logica livello visivo: ogni 5 blocchi
             let currentLevel = (towerHeight == 0) ? 1 : ((towerHeight - 1) / 5) + 1
+            // Testo INGLESE
             let mesh = MeshResource.generateText("Level: \(currentLevel)", extrusionDepth: 0.01, font: .systemFont(ofSize: 0.08))
             levelEnt.model?.mesh = mesh
         }

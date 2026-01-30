@@ -12,6 +12,11 @@ struct GameView: View {
     @State private var lastBlockPosition: SIMD3<Float> = [0, 0, 0]
     @State private var towerHeight: Int = 0
     
+    // --- STEP 14: HIGH SCORE ---
+    // Carichiamo il record salvato (se non esiste è 0)
+    @State private var highScore: Int = UserDefaults.standard.integer(forKey: "HighScore")
+    // ---------------------------
+    
     // Grandezza blocchi (1.2m)
     @State private var currentSize: SIMD2<Float> = [1.2, 1.2]
     let blockHeight: Float = 0.05
@@ -22,21 +27,21 @@ struct GameView: View {
     @State private var moveOnXAxis: Bool = true
     @State private var moveDirection: Float = 1.0
     
-    // --- STEP 13: VARIABILE COMBO ---
+    // Combo
     @State private var perfectStreak: Int = 0
-    // --------------------------------
     
     // UI
     @State private var scoreEntity: Entity?
+    @State private var highScoreEntity: Entity? // Nuovo testo High Score
     @State private var levelEntity: Entity?
-    @State private var comboEntity: Entity? // Nuovo testo per feedback
+    @State private var comboEntity: Entity?
     
     let timer = Timer.publish(every: 0.016, on: .main, in: .common).autoconnect()
 
     var body: some View {
         RealityView { content in
             
-            // Audio (Step 12)
+            // Audio
             await AudioManager.shared.loadSounds()
             
             let anchor = Entity()
@@ -105,6 +110,16 @@ struct GameView: View {
         guard let root = rootEntity else { return }
         towerHeight += 1
         
+        // --- STEP 14: LOGICA RECORD ---
+        if towerHeight > highScore {
+            highScore = towerHeight
+            UserDefaults.standard.set(highScore, forKey: "HighScore") // Salvataggio Permanente
+            
+            // Feedback visivo immediato "NEW RECORD"
+            showComboText(text: "NEW RECORD! 🏆")
+        }
+        // ------------------------------
+        
         updateUI()
         
         let newY = Float(towerHeight) * blockHeight
@@ -141,49 +156,41 @@ struct GameView: View {
         var newCenterX = lastBlockPosition.x
         var newCenterZ = lastBlockPosition.z
         
-        // Materiale di base
         var finalMaterial = block.model?.materials.first ?? SimpleMaterial(color: .red, isMetallic: false)
         
-        // --- STEP 13: LOGICA PERFETTO ---
-        // Se la differenza è minore di 5cm (0.05), lo consideriamo perfetto
-        // Ignoriamo il taglio e scatta la logica combo
+        // Logica Perfetto (Tolleranza 5cm)
         let isPerfectX = moveOnXAxis && abs(diffX) < 0.05
         let isPerfectZ = !moveOnXAxis && abs(diffZ) < 0.05
         let isPerfect = isPerfectX || isPerfectZ
         
         if isPerfect {
-            // È PERFETTO!
             perfectStreak += 1
-            showComboText(text: "PERFECT! x\(perfectStreak)")
             
-            // Allinea perfettamente (snap)
+            // Messaggio diverso se è un record o solo combo
+            if towerHeight > highScore {
+                // Priorità al messaggio Record
+            } else {
+                showComboText(text: "PERFECT! x\(perfectStreak)")
+            }
+            
             if moveOnXAxis { newCenterX = lastBlockPosition.x }
             else { newCenterZ = lastBlockPosition.z }
             
-            // Effetto Visivo: Colore Oro Metallico
             let goldMat = SimpleMaterial(color: .yellow, isMetallic: true)
             finalMaterial = goldMat
             
-            // Bonus Combo 3x: Raddoppia dimensione
             if perfectStreak >= 3 {
-                // Raddoppia, ma non superare 1.2m
                 let doubledX = min(currentSize.x * 2.0, 1.2)
                 let doubledY = min(currentSize.y * 2.0, 1.2)
-                
-                // Aggiorna la dimensione per il PROSSIMO blocco
                 self.currentSize = [doubledX, doubledY]
-                
-                // Le dimensioni attuali restano piene
                 newWidth = currentSize.x
                 newDepth = currentSize.y
-                
                 showComboText(text: "SIZE UP! 🚀")
-                perfectStreak = 0 // Resetta combo
+                perfectStreak = 0
             }
             
         } else {
-            // NON È PERFETTO (Logica Taglio Classica)
-            perfectStreak = 0 // Resetta combo
+            perfectStreak = 0
             
             if moveOnXAxis {
                 let overlap = currentSize.x - abs(diffX)
@@ -191,7 +198,6 @@ struct GameView: View {
                 newWidth = overlap
                 newCenterX = lastBlockPosition.x + (diffX / 2)
                 
-                // Detriti X
                 let debrisWidth = abs(diffX)
                 let debrisX = (diffX > 0) ? (newCenterX + (newWidth / 2) + (debrisWidth / 2)) : (newCenterX - (newWidth / 2) - (debrisWidth / 2))
                 spawnDebris(position: [debrisX, currentPos.y, currentPos.z], size: [debrisWidth, blockHeight, currentSize.y], material: finalMaterial)
@@ -202,26 +208,22 @@ struct GameView: View {
                 newDepth = overlap
                 newCenterZ = lastBlockPosition.z + (diffZ / 2)
                 
-                // Detriti Z
                 let debrisDepth = abs(diffZ)
                 let debrisZ = (diffZ > 0) ? (newCenterZ + (newDepth / 2) + (debrisDepth / 2)) : (newCenterZ - (newDepth / 2) - (debrisDepth / 2))
                 spawnDebris(position: [currentPos.x, currentPos.y, debrisZ], size: [currentSize.x, blockHeight, debrisDepth], material: finalMaterial)
             }
             
-            // Aggiorna dimensioni correnti (si riducono)
             self.currentSize = [newWidth, newDepth]
         }
         
         if newWidth < 0.02 || newDepth < 0.02 { gameOverVisuals(); return }
         
-        // Applica mesh e posizione calcolata
         block.model?.mesh = MeshResource.generateBox(size: [newWidth, blockHeight, newDepth])
-        block.model?.materials = [finalMaterial] // Applica Oro se perfetto
+        block.model?.materials = [finalMaterial]
         block.position = [newCenterX, currentPos.y, newCenterZ]
         
         self.lastBlockPosition = [newCenterX, 0, newCenterZ]
         
-        // Audio Click
         AudioManager.shared.play("hit", from: block)
         
         if towerHeight % 5 == 0 { speed += 0.002 }
@@ -232,23 +234,19 @@ struct GameView: View {
     // --- UI COMBO ANIMATA ---
     func showComboText(text: String) {
         guard let anchor = rootEntity else { return }
-        
-        // Rimuovi testo precedente se c'è
         comboEntity?.removeFromParent()
         
         let mesh = MeshResource.generateText(text, extrusionDepth: 0.02, font: .systemFont(ofSize: 0.1, weight: .bold))
         let mat = SimpleMaterial(color: .green, isMetallic: false)
         let entity = ModelEntity(mesh: mesh, materials: [mat])
         
-        // Posiziona sopra la torre
         let textY = Float(towerHeight) * blockHeight + 0.5
-        entity.position = [0, textY, -0.5] // Un po' indietro per leggibilità
+        entity.position = [0, textY, -0.5]
         entity.components.set(BillboardComponent())
         
         anchor.addChild(entity)
         self.comboEntity = entity
         
-        // Animazione sparizione (Timer semplice)
         Task {
             try? await Task.sleep(for: .seconds(1.5))
             entity.removeFromParent()
@@ -312,21 +310,33 @@ struct GameView: View {
     
     // --- UI SETUP ---
     func setupUI(on anchor: Entity) {
+        // 1. Level (In Alto)
         let levelMesh = MeshResource.generateText("Level: 1", extrusionDepth: 0.01, font: .systemFont(ofSize: 0.08))
         let levelMat = SimpleMaterial(color: .yellow, isMetallic: false)
         let levelEnt = ModelEntity(mesh: levelMesh, materials: [levelMat])
-        levelEnt.position = [-1.0, 0.65, 0.0]
+        levelEnt.position = [-1.0, 0.80, 0.0] // Alzato un po'
         levelEnt.components.set(BillboardComponent())
         anchor.addChild(levelEnt)
         self.levelEntity = levelEnt
         
+        // 2. Score (Al centro)
         let scoreMesh = MeshResource.generateText("Score: 0", extrusionDepth: 0.01, font: .systemFont(ofSize: 0.1))
         let scoreMat = SimpleMaterial(color: .white, isMetallic: false)
         let scoreEnt = ModelEntity(mesh: scoreMesh, materials: [scoreMat])
-        scoreEnt.position = [-1.0, 0.50, 0.0]
+        scoreEnt.position = [-1.0, 0.65, 0.0]
         scoreEnt.components.set(BillboardComponent())
         anchor.addChild(scoreEnt)
         self.scoreEntity = scoreEnt
+        
+        // 3. High Score (In Basso) - STEP 14
+        let bestScoreText = "Best: \(highScore)"
+        let bestMesh = MeshResource.generateText(bestScoreText, extrusionDepth: 0.01, font: .systemFont(ofSize: 0.06))
+        let bestMat = SimpleMaterial(color: .gray, isMetallic: false)
+        let bestEnt = ModelEntity(mesh: bestMesh, materials: [bestMat])
+        bestEnt.position = [-1.0, 0.50, 0.0] // Sotto allo score
+        bestEnt.components.set(BillboardComponent())
+        anchor.addChild(bestEnt)
+        self.highScoreEntity = bestEnt
     }
     
     func updateUI() {
@@ -334,6 +344,18 @@ struct GameView: View {
             let mesh = MeshResource.generateText("Score: \(towerHeight)", extrusionDepth: 0.01, font: .systemFont(ofSize: 0.1))
             scoreEnt.model?.mesh = mesh
             scoreEnt.model?.materials = [SimpleMaterial(color: .white, isMetallic: false)]
+        }
+        
+        // STEP 14: Aggiorna High Score UI se battuto
+        if let bestEnt = highScoreEntity as? ModelEntity {
+            let mesh = MeshResource.generateText("Best: \(highScore)", extrusionDepth: 0.01, font: .systemFont(ofSize: 0.06))
+            bestEnt.model?.mesh = mesh
+            // Se stiamo battendo il record, coloralo di Oro!
+            if towerHeight >= highScore && highScore > 0 {
+                bestEnt.model?.materials = [SimpleMaterial(color: .yellow, isMetallic: true)]
+            } else {
+                bestEnt.model?.materials = [SimpleMaterial(color: .gray, isMetallic: false)]
+            }
         }
         
         if let levelEnt = levelEntity as? ModelEntity {

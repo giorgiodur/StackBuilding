@@ -90,6 +90,11 @@ struct GameView: View {
         let baseMaterial = SimpleMaterial(color: .gray, isMetallic: false)
         let baseBlock = ModelEntity(mesh: baseMesh, materials: [baseMaterial])
         baseBlock.position = [0, 0, 0]
+        
+        // Collisioni statiche per la base
+        baseBlock.generateCollisionShapes(recursive: false)
+        baseBlock.components.set(PhysicsBodyComponent(mode: .static))
+        
         anchor.addChild(baseBlock)
         
         self.lastBlockPosition = [0, 0, 0]
@@ -137,16 +142,42 @@ struct GameView: View {
         var newCenterX = lastBlockPosition.x
         var newCenterZ = lastBlockPosition.z
         
+        // Recuperiamo il materiale corrente
+        let currentMat = block.model?.materials.first ?? SimpleMaterial(color: .red, isMetallic: false)
+        
         if moveOnXAxis {
             let overlap = currentSize.x - abs(diffX)
             if overlap <= 0 { gameOverVisuals(); return }
             newWidth = overlap
             newCenterX = lastBlockPosition.x + (diffX / 2)
+            
+            // --- CALCOLO DETRITI (Asse X) ---
+            let debrisWidth = abs(diffX)
+            let debrisX = (diffX > 0) ? (newCenterX + (newWidth / 2) + (debrisWidth / 2)) : (newCenterX - (newWidth / 2) - (debrisWidth / 2))
+            
+            spawnDebris(
+                position: [debrisX, currentPos.y, currentPos.z],
+                size: [debrisWidth, blockHeight, currentSize.y],
+                material: currentMat
+            )
+            // -------------------------------
+            
         } else {
             let overlap = currentSize.y - abs(diffZ)
             if overlap <= 0 { gameOverVisuals(); return }
             newDepth = overlap
             newCenterZ = lastBlockPosition.z + (diffZ / 2)
+            
+            // --- CALCOLO DETRITI (Asse Z) ---
+            let debrisDepth = abs(diffZ)
+            let debrisZ = (diffZ > 0) ? (newCenterZ + (newDepth / 2) + (debrisDepth / 2)) : (newCenterZ - (newDepth / 2) - (debrisDepth / 2))
+            
+            spawnDebris(
+                position: [currentPos.x, currentPos.y, debrisZ],
+                size: [currentSize.x, blockHeight, debrisDepth],
+                material: currentMat
+            )
+            // -------------------------------
         }
         
         if newWidth < 0.02 || newDepth < 0.02 { gameOverVisuals(); return }
@@ -164,12 +195,40 @@ struct GameView: View {
         spawnNewBlock()
     }
     
+    // --- FUNZIONE CORRETTA E AGGIORNATA ---
+    func spawnDebris(position: SIMD3<Float>, size: SIMD3<Float>, material: RealityKit.Material) {
+        guard let root = rootEntity else { return }
+        
+        let debrisMesh = MeshResource.generateBox(size: size)
+        let debris = ModelEntity(mesh: debrisMesh, materials: [material])
+        debris.position = position
+        
+        // Fisica: Massa e Gravità
+        var physics = PhysicsBodyComponent(massProperties: .default, material: .default, mode: .dynamic)
+        physics.isAffectedByGravity = true
+        debris.components.set(physics)
+        
+        // Collisione
+        let shape = ShapeResource.generateBox(size: size)
+        debris.components.set(CollisionComponent(shapes: [shape]))
+        
+        root.addChild(debris)
+        
+        // Timer per rimuovere il detrito
+        Task {
+            // Aspetta 5 secondi (Sintassi corretta per visionOS)
+            try? await Task.sleep(for: .seconds(5))
+            
+            // Rimuovi il blocco (Senza 'await' perché è sincrono)
+            debris.removeFromParent()
+        }
+    }
+    
     func gameOverVisuals() {
         if let block = currentBlock as? ModelEntity {
             block.model?.materials = [SimpleMaterial(color: .black, isMetallic: true)]
         }
         if let textEntity = scoreEntity as? ModelEntity {
-            // Testo in INGLESE
             let mesh = MeshResource.generateText("GAME OVER", extrusionDepth: 0.01, font: .systemFont(ofSize: 0.08))
             textEntity.model?.mesh = mesh
             textEntity.model?.materials = [SimpleMaterial(color: .red, isMetallic: false)]
@@ -197,46 +256,37 @@ struct GameView: View {
         spawnNewBlock()
     }
     
-    // --- GESTIONE UI (LATERALE + BILLBOARD) ---
+    // --- UI ---
     
     func setupUI(on anchor: Entity) {
-        // Posizione: Spostato a sinistra (-1.0)
-        
-        // 1. LIVELLO (Testo INGLESE)
+        // 1. Level (Inglese + Billboard)
         let levelMesh = MeshResource.generateText("Level: 1", extrusionDepth: 0.01, font: .systemFont(ofSize: 0.08))
         let levelMat = SimpleMaterial(color: .yellow, isMetallic: false)
         let levelEnt = ModelEntity(mesh: levelMesh, materials: [levelMat])
-        
         levelEnt.position = [-1.0, 0.65, 0.0]
-        levelEnt.components.set(BillboardComponent()) // Guarda sempre l'utente
-        
+        levelEnt.components.set(BillboardComponent())
         anchor.addChild(levelEnt)
         self.levelEntity = levelEnt
         
-        // 2. SCORE (Testo INGLESE)
+        // 2. Score (Inglese + Billboard)
         let scoreMesh = MeshResource.generateText("Score: 0", extrusionDepth: 0.01, font: .systemFont(ofSize: 0.1))
         let scoreMat = SimpleMaterial(color: .white, isMetallic: false)
         let scoreEnt = ModelEntity(mesh: scoreMesh, materials: [scoreMat])
-        
         scoreEnt.position = [-1.0, 0.50, 0.0]
-        scoreEnt.components.set(BillboardComponent()) // Guarda sempre l'utente
-        
+        scoreEnt.components.set(BillboardComponent())
         anchor.addChild(scoreEnt)
         self.scoreEntity = scoreEnt
     }
     
     func updateUI() {
         if let scoreEnt = scoreEntity as? ModelEntity {
-            // Testo INGLESE
             let mesh = MeshResource.generateText("Score: \(towerHeight)", extrusionDepth: 0.01, font: .systemFont(ofSize: 0.1))
             scoreEnt.model?.mesh = mesh
             scoreEnt.model?.materials = [SimpleMaterial(color: .white, isMetallic: false)]
         }
         
         if let levelEnt = levelEntity as? ModelEntity {
-            // Logica livello visivo: ogni 5 blocchi
             let currentLevel = (towerHeight == 0) ? 1 : ((towerHeight - 1) / 5) + 1
-            // Testo INGLESE
             let mesh = MeshResource.generateText("Level: \(currentLevel)", extrusionDepth: 0.01, font: .systemFont(ofSize: 0.08))
             levelEnt.model?.mesh = mesh
         }

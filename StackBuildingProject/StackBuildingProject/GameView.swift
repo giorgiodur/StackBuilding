@@ -14,8 +14,7 @@ struct GameView: View {
     
     // --- DATI SALVATI (PERSISTENZA) ---
     @State private var highScore: Int = UserDefaults.standard.integer(forKey: "HighScore")
-    @State private var bestCombo: Int = UserDefaults.standard.integer(forKey: "BestCombo") // Nuovo Record Combo
-    // ----------------------------------
+    @State private var bestCombo: Int = UserDefaults.standard.integer(forKey: "BestCombo")
     
     // Grandezza blocchi (1.2m)
     @State private var currentSize: SIMD2<Float> = [1.2, 1.2]
@@ -33,7 +32,7 @@ struct GameView: View {
     // UI Entità
     @State private var scoreEntity: Entity?
     @State private var highScoreEntity: Entity?
-    @State private var bestComboEntity: Entity? // Nuova Scritta UI
+    @State private var bestComboEntity: Entity?
     @State private var levelEntity: Entity?
     @State private var comboEntity: Entity?
     
@@ -48,14 +47,16 @@ struct GameView: View {
             let anchor = Entity()
             anchor.position = startingPosition
             
-            // Trigger 3x5x3
+            // --- TRIGGER CLASSICO (Step 14 - Alpha 0.0) ---
             let triggerMesh = MeshResource.generateBox(width: 3.0, height: 5.0, depth: 3.0)
             let triggerMat = SimpleMaterial(color: .white.withAlphaComponent(0.0), isMetallic: false)
             let triggerEntity = ModelEntity(mesh: triggerMesh, materials: [triggerMat])
+            
             triggerEntity.position.y = 2.5
             triggerEntity.generateCollisionShapes(recursive: false)
             triggerEntity.components.set(InputTargetComponent())
             anchor.addChild(triggerEntity)
+            // ----------------------------------------------
             
             setupUI(on: anchor)
             createBase(on: anchor)
@@ -94,6 +95,11 @@ struct GameView: View {
     }
     
     func createBase(on anchor: Entity) {
+        // Fix Restart: Resetta le dimensioni PRIMA di creare il blocco
+        self.currentSize = [1.2, 1.2]
+        self.lastBlockPosition = [0, 0, 0]
+        self.perfectStreak = 0
+        
         let baseMesh = MeshResource.generateBox(size: [currentSize.x, blockHeight, currentSize.y])
         let baseMaterial = SimpleMaterial(color: .gray, isMetallic: false)
         let baseBlock = ModelEntity(mesh: baseMesh, materials: [baseMaterial])
@@ -101,17 +107,13 @@ struct GameView: View {
         baseBlock.generateCollisionShapes(recursive: false)
         baseBlock.components.set(PhysicsBodyComponent(mode: .static))
         anchor.addChild(baseBlock)
-        
-        self.lastBlockPosition = [0, 0, 0]
-        self.currentSize = [1.2, 1.2]
-        self.perfectStreak = 0
     }
     
     func spawnNewBlock() {
         guard let root = rootEntity else { return }
         towerHeight += 1
         
-        // Logica High Score (Altezza)
+        // Logica High Score
         if towerHeight > highScore {
             highScore = towerHeight
             UserDefaults.standard.set(highScore, forKey: "HighScore")
@@ -156,25 +158,22 @@ struct GameView: View {
         
         var finalMaterial = block.model?.materials.first ?? SimpleMaterial(color: .red, isMetallic: false)
         
-        // Logica Perfetto (Tolleranza 5cm)
-        let isPerfectX = moveOnXAxis && abs(diffX) < 0.05
-        let isPerfectZ = !moveOnXAxis && abs(diffZ) < 0.05
+        // --- HARDCORE MODE: Tolleranza 0.02 (2cm) ---
+        let isPerfectX = moveOnXAxis && abs(diffX) < 0.02
+        let isPerfectZ = !moveOnXAxis && abs(diffZ) < 0.02
         let isPerfect = isPerfectX || isPerfectZ
+        // --------------------------------------------
         
         if isPerfect {
             perfectStreak += 1
             
-            // --- NUOVA LOGICA: RECORD COMBO ---
             if perfectStreak > bestCombo {
                 bestCombo = perfectStreak
                 UserDefaults.standard.set(bestCombo, forKey: "BestCombo")
-                // Feedback speciale se batti il record combo
                 showComboText(text: "MAX COMBO! 🔥")
             } else {
-                // Feedback standard
                 showComboText(text: "PERFECT! x\(perfectStreak)")
             }
-            // ----------------------------------
             
             if moveOnXAxis { newCenterX = lastBlockPosition.x }
             else { newCenterZ = lastBlockPosition.z }
@@ -189,14 +188,10 @@ struct GameView: View {
                 newWidth = currentSize.x
                 newDepth = currentSize.y
                 showComboText(text: "SIZE UP! 🚀")
-                // Nota: Non resettiamo perfectStreak qui per permettere di battere il record combo!
-                // Ma resettiamo il bonus 'size up' internamente se volessimo,
-                // oppure lasciamo che continui a ingrandire (ma c'è il limite min(..., 1.2)).
-                // Per semplicità, lasciamo la streak intatta.
             }
             
         } else {
-            perfectStreak = 0 // Reset Combo se sbagli
+            perfectStreak = 0 // Reset Combo
             
             if moveOnXAxis {
                 let overlap = currentSize.x - abs(diffX)
@@ -298,9 +293,11 @@ struct GameView: View {
         guard let root = rootEntity else { return }
         root.children.removeAll()
         
+        // Ripristino Trigger Classico
         let triggerMesh = MeshResource.generateBox(width: 3.0, height: 5.0, depth: 3.0)
         let triggerMat = SimpleMaterial(color: .white.withAlphaComponent(0.0), isMetallic: false)
         let triggerEntity = ModelEntity(mesh: triggerMesh, materials: [triggerMat])
+        
         triggerEntity.position.y = 2.5
         triggerEntity.generateCollisionShapes(recursive: false)
         triggerEntity.components.set(InputTargetComponent())
@@ -314,11 +311,9 @@ struct GameView: View {
         spawnNewBlock()
     }
     
-    // --- UI SETUP (Layout Aggiornato per 4 righe) ---
+    // --- UI SETUP ---
     func setupUI(on anchor: Entity) {
-        // Ho alzato tutto verso l'alto per fare spazio
-        
-        // 1. Level (Y=0.95)
+        // 1. Level
         let levelMesh = MeshResource.generateText("Level: 1", extrusionDepth: 0.01, font: .systemFont(ofSize: 0.08))
         let levelMat = SimpleMaterial(color: .yellow, isMetallic: false)
         let levelEnt = ModelEntity(mesh: levelMesh, materials: [levelMat])
@@ -327,7 +322,7 @@ struct GameView: View {
         anchor.addChild(levelEnt)
         self.levelEntity = levelEnt
         
-        // 2. Score (Y=0.80)
+        // 2. Score
         let scoreMesh = MeshResource.generateText("Score: 0", extrusionDepth: 0.01, font: .systemFont(ofSize: 0.1))
         let scoreMat = SimpleMaterial(color: .white, isMetallic: false)
         let scoreEnt = ModelEntity(mesh: scoreMesh, materials: [scoreMat])
@@ -336,7 +331,7 @@ struct GameView: View {
         anchor.addChild(scoreEnt)
         self.scoreEntity = scoreEnt
         
-        // 3. High Score (Y=0.65)
+        // 3. Best Score
         let bestScoreText = "Best: \(highScore)"
         let bestMesh = MeshResource.generateText(bestScoreText, extrusionDepth: 0.01, font: .systemFont(ofSize: 0.06))
         let bestMat = SimpleMaterial(color: .gray, isMetallic: false)
@@ -346,10 +341,10 @@ struct GameView: View {
         anchor.addChild(bestEnt)
         self.highScoreEntity = bestEnt
         
-        // 4. MAX COMBO (Y=0.55) - NUOVO!
+        // 4. Max Combo
         let maxComboText = "Max Combo: \(bestCombo)"
         let comboMesh = MeshResource.generateText(maxComboText, extrusionDepth: 0.01, font: .systemFont(ofSize: 0.06))
-        let comboMat = SimpleMaterial(color: .orange, isMetallic: false) // Arancione per distinguersi
+        let comboMat = SimpleMaterial(color: .orange, isMetallic: false)
         let comboEnt = ModelEntity(mesh: comboMesh, materials: [comboMat])
         comboEnt.position = [-1.0, 0.55, 0.0]
         comboEnt.components.set(BillboardComponent())
@@ -358,14 +353,12 @@ struct GameView: View {
     }
     
     func updateUI() {
-        // Aggiorna Score
         if let scoreEnt = scoreEntity as? ModelEntity {
             let mesh = MeshResource.generateText("Score: \(towerHeight)", extrusionDepth: 0.01, font: .systemFont(ofSize: 0.1))
             scoreEnt.model?.mesh = mesh
             scoreEnt.model?.materials = [SimpleMaterial(color: .white, isMetallic: false)]
         }
         
-        // Aggiorna Best Score
         if let bestEnt = highScoreEntity as? ModelEntity {
             let mesh = MeshResource.generateText("Best: \(highScore)", extrusionDepth: 0.01, font: .systemFont(ofSize: 0.06))
             bestEnt.model?.mesh = mesh
@@ -376,11 +369,9 @@ struct GameView: View {
             }
         }
         
-        // Aggiorna Max Combo - NUOVO!
         if let comboEnt = bestComboEntity as? ModelEntity {
             let mesh = MeshResource.generateText("Max Combo: \(bestCombo)", extrusionDepth: 0.01, font: .systemFont(ofSize: 0.06))
             comboEnt.model?.mesh = mesh
-            // Se stiamo battendo il record combo, diventa Arancione Acceso
             if perfectStreak >= bestCombo && bestCombo > 0 {
                 comboEnt.model?.materials = [SimpleMaterial(color: .orange, isMetallic: true)]
             } else {
@@ -388,7 +379,6 @@ struct GameView: View {
             }
         }
         
-        // Aggiorna Level
         if let levelEnt = levelEntity as? ModelEntity {
             let currentLevel = (towerHeight == 0) ? 1 : ((towerHeight - 1) / 5) + 1
             let mesh = MeshResource.generateText("Level: \(currentLevel)", extrusionDepth: 0.01, font: .systemFont(ofSize: 0.08))

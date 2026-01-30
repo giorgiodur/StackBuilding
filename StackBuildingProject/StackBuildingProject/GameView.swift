@@ -30,6 +30,11 @@ struct GameView: View {
 
     var body: some View {
         RealityView { content in
+            
+            // --- STEP 12: Caricamento Audio ---
+            await AudioManager.shared.loadSounds()
+            // ----------------------------------
+            
             let anchor = Entity()
             anchor.position = startingPosition
             
@@ -91,7 +96,7 @@ struct GameView: View {
         let baseBlock = ModelEntity(mesh: baseMesh, materials: [baseMaterial])
         baseBlock.position = [0, 0, 0]
         
-        // Collisioni statiche per la base
+        // Collisioni statiche per la base (Step 11)
         baseBlock.generateCollisionShapes(recursive: false)
         baseBlock.components.set(PhysicsBodyComponent(mode: .static))
         
@@ -151,7 +156,7 @@ struct GameView: View {
             newWidth = overlap
             newCenterX = lastBlockPosition.x + (diffX / 2)
             
-            // --- CALCOLO DETRITI (Asse X) ---
+            // --- CALCOLO DETRITI (Step 11) ---
             let debrisWidth = abs(diffX)
             let debrisX = (diffX > 0) ? (newCenterX + (newWidth / 2) + (debrisWidth / 2)) : (newCenterX - (newWidth / 2) - (debrisWidth / 2))
             
@@ -168,7 +173,7 @@ struct GameView: View {
             newDepth = overlap
             newCenterZ = lastBlockPosition.z + (diffZ / 2)
             
-            // --- CALCOLO DETRITI (Asse Z) ---
+            // --- CALCOLO DETRITI (Step 11) ---
             let debrisDepth = abs(diffZ)
             let debrisZ = (diffZ > 0) ? (newCenterZ + (newDepth / 2) + (debrisDepth / 2)) : (newCenterZ - (newDepth / 2) - (debrisDepth / 2))
             
@@ -187,6 +192,10 @@ struct GameView: View {
         self.currentSize = [newWidth, newDepth]
         self.lastBlockPosition = [newCenterX, 0, newCenterZ]
         
+        // --- STEP 12: AUDIO CLICK ---
+        AudioManager.shared.play("hit", from: block)
+        // ----------------------------
+        
         // Aumento VELOCITÀ ogni 5 blocchi (+0.002)
         if towerHeight % 5 == 0 {
             speed += 0.002
@@ -195,7 +204,7 @@ struct GameView: View {
         spawnNewBlock()
     }
     
-    // --- FUNZIONE CORRETTA E AGGIORNATA ---
+    // --- FUNZIONE DETRITI (Step 11 - Fisica) ---
     func spawnDebris(position: SIMD3<Float>, size: SIMD3<Float>, material: RealityKit.Material) {
         guard let root = rootEntity else { return }
         
@@ -214,12 +223,9 @@ struct GameView: View {
         
         root.addChild(debris)
         
-        // Timer per rimuovere il detrito
+        // Timer per rimuovere il detrito (5 secondi)
         Task {
-            // Aspetta 5 secondi (Sintassi corretta per visionOS)
             try? await Task.sleep(for: .seconds(5))
-            
-            // Rimuovi il blocco (Senza 'await' perché è sincrono)
             debris.removeFromParent()
         }
     }
@@ -227,6 +233,10 @@ struct GameView: View {
     func gameOverVisuals() {
         if let block = currentBlock as? ModelEntity {
             block.model?.materials = [SimpleMaterial(color: .black, isMetallic: true)]
+            
+            // --- STEP 12: AUDIO GAME OVER ---
+            AudioManager.shared.play("gameover", from: block)
+            // --------------------------------
         }
         if let textEntity = scoreEntity as? ModelEntity {
             let mesh = MeshResource.generateText("GAME OVER", extrusionDepth: 0.01, font: .systemFont(ofSize: 0.08))
